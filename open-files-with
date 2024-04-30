@@ -1,0 +1,1 @@
+filesw bin | fzf -0 --delimiter : --preview 'bat -pp --color=always {1} --highlight-line {2}' --bind 'enter:become(vim {1} +{2})'

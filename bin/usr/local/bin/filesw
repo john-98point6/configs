@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+        >&2 echo "usage: $0 <pattern>"
+        exit 1
+fi
+pattern="$1"
+
+if ! git rev-parse >/dev/null 2>&1
+then
+	max_depth=99
+	git grep -n -m 1 --max-depth "$max_depth" "$pattern"
+else
+	max_depth=4
+	find . -maxdepth "$max_depth" -type f -exec \
+		grep -IHn -m 1 "$pattern" {} \;
+fi

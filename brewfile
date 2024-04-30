@@ -1,0 +1,13 @@
+brew install kitty
+brew install fzf
+brew install stow
+brew install entr
+brew install hammerspoon
+brew install nvm
+brew tap homebrew/cask-versions && brew install --cask corretto8
+brew install --cask aws-vault && brew install awscli
+brew install maven
+brew install gpg
+brew install --cask gpg-suite-no-mail
+brew install jq
+ 

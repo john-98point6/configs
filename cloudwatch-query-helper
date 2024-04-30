@@ -1,0 +1,60 @@
+#!/bin/sh
+
+#read 123
+#select cmd in edit quit;
+#do
+#	echo "$cmd"
+#done
+
+die () {
+echo "oho o"
+ exit 1
+}
+
+# 1. take in query
+# 2. start query, store query_id
+# 3. set trap to stop query by id
+# 4. poll for results, end when status is done
+
+#if asd=$(echo "MEOW")
+if start_query_response="$(aws logs start-query --start-time "$(date -v-1d +'%s')" --end-time "$(date +'%s')" --query-string 'display msg; limit 10' --log-group-name sandbox-record-store)"
+then
+query_id=$(echo "$start_query_response" | jq -r '.queryId')
+echo "$query_id"
+#jq -r '.queryId' "$start_query_response"
+#echo "$asd"
+else
+die
+#echo "NOOOasd"
+fi
+
+
+#query_id="$(aws logs start-query --start-time 0 --end-time "$(date +'%s')" --query-string 'display msg' --log-group-name sandbox-record-store | jq -r '.queryId')"
+
+#echo "$query_id"
+
+trap 'echo "stopping query..." ; aws logs stop-query --query-id $query_id ; die' INT
+#echo The script is terminated; die" INT
+
+# https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_GetQueryResults.html#API_GetQueryResults_ResponseSyntax
+# Scheduled | Running | Complete | Failed | Cancelled | Timeout | Unknown
+query_status="Running"
+until [ "$query_status" != "Running" ]
+do
+sleep 5
+#query_status=$(aws logs get-query-results --query-id cb60653e-c26d-4af3-a0d1-31150b77e058 | jq '.status')
+query_result="$(aws logs get-query-results --query-id $query_id)"
+query_status="$(echo $query_result | jq '.status')"
+#echo "asd"
+done
+
+echo "$query_result"
+
+#echo "$query_id"
+#query
+#exit 1
+#aws logs stop-query --query-id "$query_id"
+
+#aws logs get-query-results --query-id cb60653e-c26d-4af3-a0d1-31150b77e058 | jq
+
+#aws logs stop-query --query-id cb60653e-c26d-4af3-a0d1-31150b77e058

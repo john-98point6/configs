@@ -1,0 +1,63 @@
+#!/bin/sh
+
+script_name="$(basename "$0")"
+verbose=0
+retries=1
+interval=10
+
+die() {
+	echo "[$script_name] ERROR: $*" 1>&2
+	echo "usage: $script_name '[-[v]] [-i interval]' '[url]'" 1>&2
+	exit 1
+}
+
+info() {
+	test "$verbose" -ne 0 && echo "[$script_name] INFO: $*"
+}
+
+# {{{ parse args
+is_integer() {
+    printf %d "$1" >/dev/null 2>&1
+}
+
+while getopts 'vi:r:' OPTION; do
+	case "$OPTION" in
+	v) verbose=1 ;;
+	r) if is_integer "$OPTARG"; then retries="$OPTARG"; else die "expected integer"; fi ;;
+	i) if is_integer "$OPTARG"; then interval="$OPTARG"; else die "expected integer"; fi ;;
+	?) die "invalid argument" ;;
+	esac
+done
+shift "$((OPTIND - 1))"
+
+url="$1"
+[ -z "$url" ] && die "expected url"
+# }}}
+
+# {{{ temp file
+tmpfile=$(mktemp || die "did not create tmpfile")
+trap 'rm  "$tmpfile"' EXIT
+# }}}
+
+info "polling '$url' every $interval seconds..."
+
+attempts=0
+line=1
+# TODO the first input may not be output, or its just my test harness
+while true
+do
+	info "poll, starting at line $line"
+	curl --silent "$url" > "$tmpfile"
+	code="$?"
+	if test "$code" -ne 0; then
+		# TODO retries
+		die "curl exited with $code"
+	fi
+
+	sed -n "$line,\$p" "$tmpfile"
+	#cat "$tmpfile"
+	line="$(wc -l < "$tmpfile" | tr -d ' ')"
+	line="$((line + 1))"
+
+	sleep "$interval"
+done
