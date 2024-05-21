@@ -1,16 +1,56 @@
 hs.window.animationDuration = 0 -- less jitter
 hs.window.filter.allowedWindowRoles = { AXStandardWindow = true } -- globally set window filters to ignore dialogs
 
-local mode = "tile"
-local focusedWindowByScreen = {}
+local function moveToRight(state, w)
+	w:moveToUnit({ state.ratio, 0, 1 - state.ratio, 1 })
+end
 
-local wf = hs.window.filter
+local function moveToLeft(state, w)
+	w:moveToUnit({ 0, 0, state.ratio, 1 })
+end
+
+local function moveToTop(state, w)
+	w:moveToUnit({ 0, 0, 1, state.ratio })
+end
+
+local function moveToBottom(state, w)
+	w:moveToUnit({ 0, state.ratio, 1, 1 - state.ratio })
+end
 
 local ratio = {
-	current = 0.5,
 	min = 0.3, -- less than this and Chrome gets squished
 	max = 0.65, -- more than this and Slack gets squished
 }
+
+local tileStrategy = {
+	horizontal = function(state, w)
+        if w == state.focusedWindow then
+			moveToRight(state, w)
+		else
+			moveToLeft(state, w)
+		end
+	end,
+	vertical = function(state, w)
+        if w == state.focusedWindow then
+			moveToTop(state, w)
+		else
+			moveToBottom(state, w)
+		end
+	end,
+}
+
+local screenState = {}
+for _, s in pairs(hs.screen.allScreens()) do
+	screenState[s:id()] = {
+		mode = "tile",
+		ratio = 0.5,
+		focusedWindow = nil
+	}
+end
+screenState[1].tileStrategy = tileStrategy.horizontal
+screenState[2].tileStrategy = tileStrategy.vertical
+
+local wf = hs.window.filter
 
 local logger = hs.logger.new("wm", "debug")
 
@@ -19,76 +59,68 @@ local logger = hs.logger.new("wm", "debug")
 local float = {}
 float["AWS VPN Client"] = 1
 
-local function moveToRight(w)
-	w:moveToUnit({ ratio.current, 0, 1 - ratio.current, 1 })
-end
 
-local function moveToLeft(w)
-	w:moveToUnit({ 0, 0, ratio.current, 1 })
-end
 
 local function placeWindow(w)
-	if mode == "monocle" then
+	local state = screenState[w:screen():id()]
+	if state.mode == "monocle" then
 		w:maximize()
 		return
 	end
 
 	local app = w:application():name()
+	if float[app] then
+		logger:d("float window, app: " .. app)
+		return
+	end
 
-        if not float[app] then
-	        logger:d("moved window, app: " .. app)
-                moveToLeft(w)
-        else
-	        logger:d("float window, app: " .. app)
-        end
+	state.tileStrategy(state, w)
+	logger:d("moved window, app: " .. app)
 end
 
 wf.new():subscribe(wf.windowInCurrentSpace, placeWindow)
 
 local function placeAll()
 	for _, w in pairs(hs.window.visibleWindows()) do
-		local screenId = w:screen():id()
-
-                if mode == "tile" and w == focusedWindowByScreen[screenId] then
-                        moveToRight(w)
-                else
-		        placeWindow(w)
-                end
+		placeWindow(w)
+        -- end
 	end
 end
 
 return {
-	mode = function(m)
+	mode = function(mode)
 		return function()
-			mode = m
+		local state = screenState[hs.screen.mainScreen():id()]
+			state.mode = mode
 			placeAll()
 		end
 	end,
 	toggleMode = function()
-		if mode == "tile" then
-			mode = "monocle"
+		local state = screenState[hs.screen.mainScreen():id()]
+		if state.mode == "tile" then
+			state.mode = "monocle"
 		else
-			mode = "tile"
+			state.mode = "tile"
 		end
 		placeAll()
 	end,
 	changeRatioBy = function(delta)
 		return function()
-			local new_ratio = ratio.current + delta
-			if new_ratio >= ratio.min and new_ratio <= ratio.max then
-				ratio.current = new_ratio
+			local currentScreen = hs.screen.mainScreen()
+			local screenId = currentScreen:id()
+			local newRatio = screenState[screenId].ratio + delta
+			if newRatio >= ratio.min and newRatio <= ratio.max then
+				screenState[screenId].ratio = newRatio
 				placeAll()
 			else
 				logger:d("at ratio bounds!")
 			end
-			logger:d("ratio.current: " .. ratio.current)
 		end
 	end,
 	makeFocusedMain = function()
                 local focusedWindow = hs.window.focusedWindow()
-		local screenId = focusedWindow:screen():id()
-		focusedWindowByScreen[screenId] = focusedWindow
-		logger:d(focusedWindowByScreen)
-		moveToRight(focusedWindow)
+		local state = screenState[focusedWindow:screen():id()]
+		state.focusedWindow = focusedWindow
+	placeWindow(focusedWindow)
 	end,
 }
